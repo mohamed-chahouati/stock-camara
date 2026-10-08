@@ -1,0 +1,392 @@
+<!DOCTYPE html>
+<html lang="es">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>Stock Cámara · Panalia</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/xlsx/0.18.5/xlsx.full.min.js"></script>
+<style>
+:root{--bg:#f5f3ef;--card:#fff;--ink:#1f1d1a;--mut:#6b665e;--line:#e4dfd6;--acc:#8a5a2b;--acc2:#f3e7d9;--ok:#2e7d4f;--bad:#b3261e;--zero:#b9b2a6}
+*{box-sizing:border-box}
+body{margin:0;font-family:system-ui,-apple-system,"Segoe UI",Roboto,sans-serif;background:var(--bg);color:var(--ink)}
+header{background:var(--acc);color:#fff;padding:14px 20px;display:flex;align-items:center;justify-content:space-between;flex-wrap:wrap;gap:10px}
+header h1{margin:0;font-size:20px}
+header .meta{font-size:13px;opacity:.9}
+main{max-width:1100px;margin:0 auto;padding:16px}
+.bar{display:flex;flex-wrap:wrap;gap:10px;align-items:center;background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px;margin-bottom:12px}
+.bar label{font-size:13px;color:var(--mut)}
+input[type=date],input[type=search],select{padding:8px 10px;border:1px solid var(--line);border-radius:8px;font-size:14px;background:#fff}
+input[type=search]{flex:1;min-width:180px}
+.btn{padding:9px 14px;border:0;border-radius:8px;font-size:14px;cursor:pointer;background:var(--acc);color:#fff;font-weight:600}
+.btn.sec{background:var(--acc2);color:var(--acc)}
+.btn.danger{background:#fbe9e7;color:var(--bad)}
+.kpis{display:grid;grid-template-columns:repeat(auto-fit,minmax(160px,1fr));gap:10px;margin-bottom:12px}
+.kpi{background:var(--card);border:1px solid var(--line);border-radius:10px;padding:12px}
+.kpi b{display:block;font-size:24px}
+.kpi span{font-size:12px;color:var(--mut);text-transform:uppercase;letter-spacing:.04em}
+.msg{display:none;padding:10px 12px;border-radius:8px;margin-bottom:12px;font-size:14px}
+.msg.ok{display:block;background:#e7f4ec;color:var(--ok)}
+.msg.warn{display:block;background:#fff4e0;color:#8a5a00}
+.tbl{background:var(--card);border:1px solid var(--line);border-radius:10px;overflow:auto}
+table{width:100%;border-collapse:collapse;font-size:14px}
+th{position:sticky;top:0;background:#faf8f4;text-align:left;padding:10px;border-bottom:1px solid var(--line);font-size:12px;color:var(--mut);text-transform:uppercase;cursor:pointer;user-select:none;white-space:nowrap}
+td{padding:6px 10px;border-bottom:1px solid var(--line)}
+td.num,th.num{text-align:right}
+tr.zero td{color:var(--zero)}
+td input{width:90px;text-align:right;padding:6px 8px;border:1px solid var(--line);border-radius:6px;font-size:14px}
+tr.zero td input{color:var(--zero)}
+.up{color:var(--ok)}.down{color:var(--bad)}
+.foot{font-size:12px;color:var(--mut);margin-top:10px}
+@media(max-width:600px){td,th{padding:6px}td input{width:70px}.hide-m{display:none}}
+</style>
+</head>
+<body>
+<header>
+  <h1>Stock Cámara</h1>
+  <div class="meta" id="meta">Sin datos cargados</div>
+</header>
+<main>
+  <div class="bar">
+    <label>Fecha</label>
+    <input type="date" id="fecha">
+    <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
+    <button class="btn" onclick="document.getElementById('file').click()">Cargar Excel de stock</button>
+    <button class="btn sec" onclick="guardar()">Guardar día</button>
+    <button class="btn sec" onclick="exportar()">Exportar Excel</button>
+    <button class="btn danger" onclick="ponerCero()">Poner todo a 0</button>
+  </div>
+
+  <div id="msg" class="msg"></div>
+
+  <div class="kpis">
+    <div class="kpi"><span>Referencias</span><b id="kRefs">0</b></div>
+    <div class="kpi"><span>Con stock</span><b id="kCon">0</b></div>
+    <div class="kpi"><span>Sin stock</span><b id="kSin">0</b></div>
+    <div class="kpi"><span>Total cajas</span><b id="kTot">0</b></div>
+  </div>
+
+  <div class="bar">
+    <input type="search" id="q" placeholder="Buscar código o producto…">
+    <select id="filtro">
+      <option value="all">Todos</option>
+      <option value="con">Con stock</option>
+      <option value="sin">Sin stock</option>
+    </select>
+    <label>Comparar con</label>
+    <select id="comp"></select>
+  </div>
+
+  <div class="tbl">
+    <table>
+      <thead><tr>
+        <th data-k="c">Código</th>
+        <th data-k="n">Producto</th>
+        <th class="num" data-k="q">Cantidad</th>
+        <th class="num hide-m" data-k="a">Anterior</th>
+        <th class="num hide-m" data-k="d">Dif.</th>
+      </tr></thead>
+      <tbody id="tb"></tbody>
+    </table>
+  </div>
+  <div class="foot">Al cargar el Excel, todas las referencias se ponen a 0 y se rellenan con las cantidades del archivo (sumando lotes). Las que no aparecen quedan a 0. Los datos se guardan en este navegador.</div>
+</main>
+
+<script>
+// ===== MAESTRO DE PRODUCTOS (fijo) =====
+const PRODUCTOS = [{"c": "1000","n": "PAN PUEBLO 770 GR 8 UD - ALCAMPO"},
+  {"c": "1001","n": "CHAPATA CRISTAL 400 GR 12 UD"},
+  {"c": "1004","n": "BARRA PICOS CANDEAL ESPECIAL 270 GR 20 UD"},
+  {"c": "1005","n": "BARRA CAMPERA 330 GR 15 UD"},
+  {"c": "1006","n": "BARRA SAINT HONORE 330 GR 15 UD"},
+  {"c": "1007","n": "BARRA RUSTICA 300 GR 20 UD"},
+  {"c": "1008","n": "BARRITA 60GR 96 UD"},
+  {"c": "1009","n": "1/2 BAGUETTE PURO TRIGO 125 GR 50 UD"},
+  {"c": "1010","n": "NATURAL GOURMET 90 GR 50 UD"},
+  {"c": "1011","n": "BARRA INTEGRAL 93,3% 300 GR 20 UD - ECOMORA"},
+  {"c": "1012","n": "BARRA MEDIA VIENA SIN SAL 140 GR 30 UD"},
+  {"c": "1013","n": "BARRA BASTON 300 GR 20 UD"},
+  {"c": "1014","n": "PAN CENTENO 325 GR 20 UD"},
+  {"c": "1015","n": "ROMBO GRANDE 80 GR 60 UD"},
+  {"c": "1016","n": "HOGAZA PAYES 550 GR 10 UD"},
+  {"c": "1017","n": "BARRA CAMPESINA HORNO PIEDRA 330 GR 15 UD - ECI"},
+  {"c": "1018","n": "PAN TORRIJA 400 GR 16 UD"},
+  {"c": "1019","n": "CHAPATIN GOURMET CEREALES 45 GR 120 UD"},
+  {"c": "1020","n": "CHAPATIN GOURMET INTEGRAL 45 GR 120 UD"},
+  {"c": "1021","n": "BARRITA PICOS 65 GR 80 UD"},
+  {"c": "1022","n": "BARRA VIENA ESPIGA 270 GR 20 UD"},
+  {"c": "1023","n": "BARRITA 80GR 70 UD"},
+  {"c": "1024","n": "ROMBO MEDIANO 65 GR 70 UD"},
+  {"c": "1025","n": "BARRITA PURO TRIGO 80 GR 70 UD"},
+  {"c": "1026","n": "CRISTAL GOURMET 50 GR 80 UD"},
+  {"c": "1027","n": "BARRA ESPIGA CEREALES 250 GR 20 UD"},
+  {"c": "1028","n": "BARRA CAMPESINA 270 GR 20 UD"},
+  {"c": "1029","n": "CHAPATIN GOURMET 45 GR 120 UD"},
+  {"c": "1030","n": "COLON CANDEAL 400 GR 14 UD"},
+  {"c": "1031","n": "BARRA 8 CEREALES SEMILLAS 270 GR 20 UD"},
+  {"c": "1032","n": "BOCATA GOURMET 100 GR 50 UD"},
+  {"c": "1033","n": "BARRA ESPIGA PLUS 330 GR 20 UD"},
+  {"c": "1034","n": "BARRA FERMENTO NATURAL 300 GR 20 UD"},
+  {"c": "1035","n": "BAGUETTE RUSTICA 280 GR 30 UD"},
+  {"c": "1036","n": "PAN PUEBLO 770 GR 8 UD"},
+  {"c": "1037","n": "HOGAZA CAMPESINA 770 GR 8 UD"},
+  {"c": "1038","n": "PANECILLO 6UD/20PACK 60 GR 120 UD"},
+  {"c": "1039","n": "CHAPATA MINI 5UD/14PACK 100 GR 70 UD"},
+  {"c": "1040","n": "BARRA ESPIGA CANDEAL 340 GR 20 UD"},
+  {"c": "1041","n": "PAN PICADO ANDALUZ 250 GR 20 UD"},
+  {"c": "1042","n": "PAN SEVILLANO 250 GR 20 UD"},
+  {"c": "1043","n": "PANECILLO CEBOLLA 70 GR 60 UD"},
+  {"c": "1044","n": "ROMBO MULTICEREAL 4UD/15 PACK 90 GR 60 UD"},
+  {"c": "1045","n": "BARRA MEDIA VIENA 140 GR 40 UD"},
+  {"c": "1047","n": "HOGAZA RUSTICA 390 GR 12 UD"},
+  {"c": "1049","n": "BARRA INTEGRAL 93,3% 300 GR 20 UD"},
+  {"c": "1050","n": "BARRITA CANDEAL 110 GR 60 UD"},
+  {"c": "1051","n": "BAGUETTE RUSTICA 280 GR 30 UD - ECI"},
+  {"c": "1052","n": "BARRA ESPIGA PLUS PURO TRIGO 400 GR 20 UD"},
+  {"c": "1053","n": "BARRA ESPIGA PLUS ACEITE OLIVA V.EXTRA 330 GR 20 UD"},
+  {"c": "1054","n": "BARRITA CASTILLA 100 GR 60 UD"},
+  {"c": "1056","n": "HOGAZA MAIZ Y PASAS 550 GR 12 UD"},
+  {"c": "1057","n": "LIBRETA CANDEAL 530 GR 14 UD"},
+  {"c": "1058","n": "HOGAZA PANACOL 500 GR 12 UD"},
+  {"c": "1059","n": "HOGAZA ESPELTA 550 GR 12 UD"},
+  {"c": "1060","n": "HOGAZA PASAS Y NUECES 550 GR 12 UD"},
+  {"c": "1061","n": "HOGAZA CENTENO 550 GR 12 UD"},
+  {"c": "1062","n": "PAN CAMPEON DEL MUNDO 750 GR 10 UD"},
+  {"c": "1063","n": "HOGAZA CEREALES 550 GR 12 UD"},
+  {"c": "1064","n": "HOGAZA PAN ALEMAN 550 GR"},
+  {"c": "1065","n": "HOGAZA PURO TRIGO 550 GR 12 UD"},
+  {"c": "1066","n": "HOGAZA GOURMET SARRACENO Y ESPELTA 450 GR 14 UD"},
+  {"c": "1067","n": "CHAPATIN GOURMET PASAS Y NUECES 45 GR 120 UD"},
+  {"c": "1068","n": "CHAPATIN GOURMET OLIVAS 45 GR 120 UD"},
+  {"c": "1069","n": "BARRA ESPIGA PLUS 330 GR 20 UD - DISMYL"},
+  {"c": "1070","n": "BARRA ESPIGA PLUS PURO TRIGO 330 GR 20 UD - DISMYL"},
+  {"c": "1084","n": "BARRA CAMPERA 330 GR 15 UD - ALCAMPO"},
+  {"c": "1100","n": "BARRA INTEGRAL 93,3% 300 GR 20 UD - ALCAMPO"},
+  {"c": "1102","n": "BARRA VIENA ESPIGA 270 GR 20 UD - ECOMORA"},
+  {"c": "1104","n": "BARRA PICOS CANDEAL ESPECIAL 270 GR 20 UD - ECI"},
+  {"c": "1107","n": "CHAPATIN GOURMENT 11 UD (COCIDO)"},
+  {"c": "1109","n": "CHAPATIN INTEGRAL 6 UD (COCIDO)"},
+  {"c": "1111","n": "BARRA RUSTICA MAIZ Y SEMILLAS 320 GR 20 UD"},
+  {"c": "1112","n": "BARRA RUSTICA SARRACENO Y SEMILLAS 320 GR 20 UD"},
+  {"c": "1113","n": "BARRA PROVENZAL 450 GR 12 UD"},
+  {"c": "1114","n": "HOGAZA DE SARRACENO Y SEMILLAS 450 GR 12 UD"},
+  {"c": "1115","n": "HOGAZA DE MAIZ Y SEMILLAS 450 GR 12 UD"},
+  {"c": "1116","n": "1/2 BAGUETTE SUPREME 125 GR 40 UD"},
+  {"c": "1118","n": "HOGAZA ESPELTA MEDIANA 450 G 12 UD"},
+  {"c": "1122","n": "HOGAZA PAN PROTEICO 400 GR 12 UD"},
+  {"c": "1123","n": "PROTEICO GOURMET 110 GR 50 UNDS"},
+  {"c": "1124","n": "HOGAZA CALABAZA CON PIPAS DE CALABAZA 450 GR 12 UD"},
+  {"c": "1125","n": "BARRA SARRACENO"},
+  {"c": "1126","n": "HOGAZA TRIGO ACEROLA"},
+  {"c": "1127","n": "HOGAZA CLASICA SEMOLA"},
+  {"c": "2000","n": "1/2 BAGUETTE SUPREM 125 GR 40 UD"},
+  {"c": "2001","n": "CARACOLAS CON PASAS 34 UD 115 GR"},
+  {"c": "2002","n": "PLANCHA DE HOJALDRE 30X40 24 UD"},
+  {"c": "2003","n": "CROISSANT CURVO MANTEQUILLA 100 GR 46 UD"},
+  {"c": "2004","n": "CROISSANT ARTESANO 100G 42UD 4,2KG"},
+  {"c": "2005","n": "NAPOLITANA CREMA 115GR 56UD 6,44KG"},
+  {"c": "2006","n": "NAPOLITANA CHOCOLATE 115GR 56UD 6,44 KG"},
+  {"c": "2007","n": "MOLLETE DE 95GR 60 UD"},
+  {"c": "2008","n": "PREPARADO PARA MIGAS 500GR 10 BOLSAS"},
+  {"c": "2009","n": "HERRADURA CREMA 35UD 180G 6,3KG"},
+  {"c": "2010","n": "HERRADURA CHOCOLATE 35UD 170G 5,95KG"},
+  {"c": "2011","n": "NAPOLITANA JAMON QUESO 56UD 110G 6,16KG"},
+  {"c": "2012","n": "BIZCOCHO DESAYUNO ZANAHORIA 2 KG"},
+  {"c": "2013","n": "BIZCOCHO DESAYUNO MARMOL 2KG"},
+  {"c": "2014","n": "BIZCOCHO DESAYUNO GRIEGO 2KG"},
+  {"c": "2016","n": "PANECILLO SIN GLUTEN 45G 45UD"},
+  {"c": "2017","n": "ROSCON PEQUEÑO SIN RELLENO 250 GR"},
+  {"c": "2018","n": "ROSCON PEQUEÑO CON RELLENO 250 GR"},
+  {"c": "2019","n": "ROSCON MEDIANO SIN RELLENO 500 GR"},
+  {"c": "2020","n": "ROSCON MEDIANO CON RELLENO 500 GR"},
+  {"c": "2027","n": "PASTAS DE TE MANTEQUILLA 2KG 2UD"}];
+
+const LS_KEY = 'stockCamara_v1';
+let state = {};          // codigo -> cantidad (día actual)
+let hist = {};           // 'YYYY-MM-DD' -> {cod:cant}
+let sortK = 'c', sortDir = 1;
+const nombrePorCod = Object.fromEntries(PRODUCTOS.map(p => [p.c, p.n]));
+const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
+const codPorNombre = Object.fromEntries(PRODUCTOS.map(p => [norm(p.n), p.c]));
+const $ = id => document.getElementById(id);
+const hoy = () => new Date().toISOString().slice(0,10);
+const fmt = n => (Math.round(n*100)/100).toLocaleString('es-ES');
+
+function vacio(){ return Object.fromEntries(PRODUCTOS.map(p => [p.c, 0])); }
+
+function cargarLS(){
+  try { hist = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch(e){ hist = {}; }
+}
+function guardarLS(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify(hist)); return true; }
+  catch(e){ aviso('No se pudo guardar en el navegador.', 'warn'); return false; }
+}
+
+function abrirFecha(f){
+  state = Object.assign(vacio(), hist[f] || {});
+  rellenarComp(); render();
+}
+
+function guardar(silencioso){
+  const f = $('fecha').value || hoy();
+  hist[f] = {...state};
+  if (guardarLS() && !silencioso) aviso('Stock del ' + fDate(f) + ' guardado.', 'ok');
+  rellenarComp(); render();
+}
+
+function ponerCero(){
+  if (!confirm('¿Poner todas las cantidades a 0?')) return;
+  state = vacio(); guardar(true); aviso('Cantidades puestas a 0.', 'ok');
+}
+
+function fDate(f){ const [y,m,d]=f.split('-'); return `${d}/${m}/${y}`; }
+
+function rellenarComp(){
+  const f = $('fecha').value;
+  const prev = $('comp').value;
+  const fechas = Object.keys(hist).filter(x => x !== f).sort().reverse();
+  $('comp').innerHTML = '<option value="">— Ninguno —</option>' + fechas.map(x => `<option value="${x}">${fDate(x)}</option>`).join('');
+  if (fechas.includes(prev)) $('comp').value = prev;
+  else if (fechas.length) $('comp').value = fechas.find(x => x < f) || '';
+}
+
+function aviso(t, tipo){
+  const m = $('msg'); m.className = 'msg ' + tipo; m.innerHTML = t;
+}
+
+// ===== LECTURA DEL EXCEL =====
+$('file').addEventListener('change', async e => {
+  const file = e.target.files[0]; if (!file) return;
+  try {
+    const wb = XLSX.read(await file.arrayBuffer(), {type:'array'});
+    const r = parsear(wb);
+    if (!r) { aviso('No se encontraron columnas de producto y cantidad en el Excel.', 'warn'); return; }
+    state = vacio();
+    let filas = 0;
+    for (const [cod, q] of Object.entries(r.datos)) { state[cod] += q; filas++; }
+    guardar(true);
+    const cargadas = Object.values(state).filter(v => v > 0).length;
+    let t = `Excel <b>${file.name}</b> cargado: ${cargadas} referencias con stock, ${PRODUCTOS.length - cargadas} a 0.`;
+    if (r.desconocidos.length) {
+      aviso(t + `<br>⚠ ${r.desconocidos.length} referencia(s) del Excel no están en el maestro y se han ignorado: ` + r.desconocidos.map(x => `<b>${x}</b>`).join(', '), 'warn');
+    } else aviso(t, 'ok');
+  } catch(err) { aviso('Error leyendo el archivo: ' + err.message, 'warn'); }
+  e.target.value = '';
+});
+
+function parsear(wb){
+  // Busca en todas las hojas una fila de cabecera con columna de producto/código y cantidad
+  for (const soloCodigo of [true, false])
+  for (const nombre of wb.SheetNames) {
+    const rows = XLSX.utils.sheet_to_json(wb.Sheets[nombre], {header:1, defval:null});
+    for (let i = 0; i < Math.min(rows.length, 20); i++) {
+      const h = (rows[i] || []).map(norm);
+      const iQ = h.findIndex(x => x.includes('CANTIDAD'));
+      if (iQ < 0) continue;
+      const iCod = h.findIndex(x => x === 'PRODUCTO' || x === 'CODIGO' || x === 'COD BC' || x === 'COD' || x === 'Nº' || x === 'NO.');
+      const iNom = h.findIndex(x => x.includes('NOMBRE') || x.includes('DESCRIPCION') || x === 'ETIQUETAS DE FILA');
+      if (iCod < 0 && (soloCodigo || iNom < 0)) continue;
+      const datos = {}, desc = new Set();
+      for (const row of rows.slice(i+1)) {
+        if (!row) continue;
+        const q = Number(String(row[iQ] ?? '').replace(',', '.'));
+        if (!isFinite(q) || row[iQ] === null || row[iQ] === '') continue;
+        let cod = null;
+        if (iCod >= 0 && row[iCod] != null) {
+          const c = String(row[iCod]).trim().replace(/\.0+$/,'');
+          if (nombrePorCod[c]) cod = c;
+        }
+        if (!cod && iNom >= 0 && row[iNom] != null) cod = codPorNombre[norm(row[iNom])] || null;
+        if (!cod) {
+          const etiqueta = iCod >= 0 && row[iCod] != null ? String(row[iCod]) : String(row[iNom] ?? '');
+          if (/total/i.test(etiqueta) || !etiqueta.trim()) continue;
+          desc.add(etiqueta + (iNom >= 0 && iCod >= 0 && row[iNom] ? ' – ' + row[iNom] : ''));
+          continue;
+        }
+        datos[cod] = (datos[cod] || 0) + q;
+      }
+      if (Object.keys(datos).length) return {datos, desconocidos:[...desc]};
+    }
+  }
+  return null;
+}
+
+// ===== TABLA =====
+function filas(){
+  const comp = hist[$('comp').value] || null;
+  const q = norm($('q').value), fil = $('filtro').value;
+  return PRODUCTOS.map(p => {
+    const cant = state[p.c] || 0;
+    const ant = comp ? (comp[p.c] || 0) : null;
+    return {c:p.c, n:p.n, q:cant, a:ant, d: ant === null ? null : cant - ant};
+  }).filter(r =>
+    (!q || r.c.includes(q) || norm(r.n).includes(q)) &&
+    (fil === 'all' || (fil === 'con' ? r.q > 0 : r.q <= 0))
+  ).sort((x,y) => {
+    const a = x[sortK], b = y[sortK];
+    if (sortK === 'n') return a.localeCompare(b) * sortDir;
+    return ((Number(a) || 0) - (Number(b) || 0)) * sortDir;
+  });
+}
+
+function render(){
+  const rs = filas();
+  $('tb').innerHTML = rs.map(r => `
+    <tr class="${r.q > 0 ? '' : 'zero'}">
+      <td>${r.c}</td>
+      <td>${r.n}</td>
+      <td class="num"><input type="number" step="any" min="0" value="${r.q}" data-c="${r.c}"></td>
+      <td class="num hide-m">${r.a === null ? '' : fmt(r.a)}</td>
+      <td class="num hide-m ${r.d > 0 ? 'up' : r.d < 0 ? 'down' : ''}">${r.d === null || r.d === 0 ? (r.d === 0 ? '0' : '') : (r.d > 0 ? '+' : '') + fmt(r.d)}</td>
+    </tr>`).join('');
+  const vals = Object.values(state);
+  $('kRefs').textContent = PRODUCTOS.length;
+  $('kCon').textContent = vals.filter(v => v > 0).length;
+  $('kSin').textContent = vals.filter(v => v <= 0).length;
+  $('kTot').textContent = fmt(vals.reduce((a,b) => a + b, 0));
+  const f = $('fecha').value;
+  $('meta').textContent = hist[f] ? 'Stock del ' + fDate(f) : 'Stock del ' + fDate(f) + ' · sin guardar';
+}
+
+$('tb').addEventListener('change', e => {
+  if (e.target.dataset.c) {
+    state[e.target.dataset.c] = Number(e.target.value) || 0;
+    guardar(true);
+  }
+});
+document.querySelectorAll('th[data-k]').forEach(th => th.onclick = () => {
+  const k = th.dataset.k; sortDir = sortK === k ? -sortDir : 1; sortK = k; render();
+});
+$('q').oninput = render;
+$('filtro').onchange = render;
+$('comp').onchange = render;
+$('fecha').onchange = () => abrirFecha($('fecha').value);
+
+// ===== EXPORTAR =====
+function exportar(){
+  const f = $('fecha').value;
+  const comp = hist[$('comp').value] || null;
+  const data = PRODUCTOS.map(p => {
+    const o = {'Código': Number(p.c), 'Producto': p.n, 'Cantidad': state[p.c] || 0};
+    if (comp) { o['Anterior (' + fDate($('comp').value) + ')'] = comp[p.c] || 0; o['Diferencia'] = (state[p.c]||0) - (comp[p.c]||0); }
+    return o;
+  });
+  const ws = XLSX.utils.json_to_sheet(data);
+  ws['!cols'] = [{wch:9},
+  {wch:55},
+  {wch:11},
+  {wch:20},
+  {wch:11}];
+  const wb = XLSX.utils.book_new();
+  XLSX.utils.book_append_sheet(wb, ws, 'Stock');
+  XLSX.writeFile(wb, `Stock_Camara_${f}.xlsx`);
+}
+
+// ===== INICIO =====
+cargarLS();
+const ultimas = Object.keys(hist).sort();
+$('fecha').value = hoy();
+abrirFecha(hoy());
+if (!hist[hoy()] && ultimas.length) aviso('Hoy aún no hay stock cargado. Último guardado: ' + fDate(ultimas[ultimas.length-1]) + '.', 'warn');
+</script>
+</body>
+</html>
