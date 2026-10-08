@@ -38,12 +38,28 @@ tr.zero td input{color:var(--zero)}
 .up{color:var(--ok)}.down{color:var(--bad)}
 .foot{font-size:12px;color:var(--mut);margin-top:10px}
 @media(max-width:600px){td,th{padding:6px}td input{width:70px}.hide-m{display:none}}
+#login{min-height:100vh;display:flex;align-items:center;justify-content:center;padding:16px}
+.loginBox{background:var(--card);border:1px solid var(--line);border-radius:12px;padding:28px;width:100%;max-width:340px;display:flex;flex-direction:column;gap:12px;box-shadow:0 4px 20px rgba(0,0,0,.06)}
+.loginBox h2{margin:0;color:var(--acc)}
+.loginBox p{margin:0;color:var(--mut);font-size:14px}
+.loginBox input{padding:10px 12px;border:1px solid var(--line);border-radius:8px;font-size:15px}
+#loginErr{color:var(--bad);font-size:13px;min-height:16px}
 </style>
 </head>
 <body>
+<div id="login">
+  <form id="loginForm" class="loginBox">
+    <h2>Stock Cámara</h2>
+    <p>Introduce la contraseña para acceder</p>
+    <input type="password" id="pw" placeholder="Contraseña" autocomplete="current-password" required>
+    <button class="btn" id="loginBtn" type="submit">Entrar</button>
+    <div id="loginErr"></div>
+  </form>
+</div>
+<div id="app" style="display:none">
 <header>
   <h1>Stock Cámara</h1>
-  <div class="meta" id="meta">Sin datos cargados</div>
+  <div style="display:flex;gap:14px;align-items:center"><div class="meta" id="meta">Sin datos cargados</div><button class="btn sec" style="padding:6px 10px" onclick="salir()">Salir</button></div>
 </header>
 <main>
   <div class="bar">
@@ -52,6 +68,7 @@ tr.zero td input{color:var(--zero)}
     <input type="file" id="file" accept=".xlsx,.xls,.csv" hidden>
     <button class="btn" onclick="document.getElementById('file').click()">Cargar Excel de stock</button>
     <button class="btn sec" onclick="guardar()">Guardar día</button>
+    <button class="btn" style="background:#2e7d4f" onclick="publicar()">Descargar para publicar</button>
     <button class="btn sec" onclick="exportar()">Exportar Excel</button>
     <button class="btn danger" onclick="ponerCero()">Poner todo a 0</button>
   </div>
@@ -88,136 +105,37 @@ tr.zero td input{color:var(--zero)}
       <tbody id="tb"></tbody>
     </table>
   </div>
-  <div class="foot">Al cargar el Excel, todas las referencias se ponen a 0 y se rellenan con las cantidades del archivo (sumando lotes). Las que no aparecen quedan a 0. Los datos se guardan en este navegador.</div>
+  <div class="foot">Al cargar el Excel, todas las referencias se ponen a 0 y se rellenan con las cantidades del archivo (sumando lotes). Las que no aparecen quedan a 0. Los datos se guardan en este navegador; para que los vean otros equipos, pulsa «Descargar para publicar» y sube el stock.json a GitHub.</div>
 </main>
+</div>
 
 <script>
 // ===== MAESTRO DE PRODUCTOS (fijo) =====
-const PRODUCTOS = [{"c": "1000","n": "PAN PUEBLO 770 GR 8 UD - ALCAMPO"},
-  {"c": "1001","n": "CHAPATA CRISTAL 400 GR 12 UD"},
-  {"c": "1004","n": "BARRA PICOS CANDEAL ESPECIAL 270 GR 20 UD"},
-  {"c": "1005","n": "BARRA CAMPERA 330 GR 15 UD"},
-  {"c": "1006","n": "BARRA SAINT HONORE 330 GR 15 UD"},
-  {"c": "1007","n": "BARRA RUSTICA 300 GR 20 UD"},
-  {"c": "1008","n": "BARRITA 60GR 96 UD"},
-  {"c": "1009","n": "1/2 BAGUETTE PURO TRIGO 125 GR 50 UD"},
-  {"c": "1010","n": "NATURAL GOURMET 90 GR 50 UD"},
-  {"c": "1011","n": "BARRA INTEGRAL 93,3% 300 GR 20 UD - ECOMORA"},
-  {"c": "1012","n": "BARRA MEDIA VIENA SIN SAL 140 GR 30 UD"},
-  {"c": "1013","n": "BARRA BASTON 300 GR 20 UD"},
-  {"c": "1014","n": "PAN CENTENO 325 GR 20 UD"},
-  {"c": "1015","n": "ROMBO GRANDE 80 GR 60 UD"},
-  {"c": "1016","n": "HOGAZA PAYES 550 GR 10 UD"},
-  {"c": "1017","n": "BARRA CAMPESINA HORNO PIEDRA 330 GR 15 UD - ECI"},
-  {"c": "1018","n": "PAN TORRIJA 400 GR 16 UD"},
-  {"c": "1019","n": "CHAPATIN GOURMET CEREALES 45 GR 120 UD"},
-  {"c": "1020","n": "CHAPATIN GOURMET INTEGRAL 45 GR 120 UD"},
-  {"c": "1021","n": "BARRITA PICOS 65 GR 80 UD"},
-  {"c": "1022","n": "BARRA VIENA ESPIGA 270 GR 20 UD"},
-  {"c": "1023","n": "BARRITA 80GR 70 UD"},
-  {"c": "1024","n": "ROMBO MEDIANO 65 GR 70 UD"},
-  {"c": "1025","n": "BARRITA PURO TRIGO 80 GR 70 UD"},
-  {"c": "1026","n": "CRISTAL GOURMET 50 GR 80 UD"},
-  {"c": "1027","n": "BARRA ESPIGA CEREALES 250 GR 20 UD"},
-  {"c": "1028","n": "BARRA CAMPESINA 270 GR 20 UD"},
-  {"c": "1029","n": "CHAPATIN GOURMET 45 GR 120 UD"},
-  {"c": "1030","n": "COLON CANDEAL 400 GR 14 UD"},
-  {"c": "1031","n": "BARRA 8 CEREALES SEMILLAS 270 GR 20 UD"},
-  {"c": "1032","n": "BOCATA GOURMET 100 GR 50 UD"},
-  {"c": "1033","n": "BARRA ESPIGA PLUS 330 GR 20 UD"},
-  {"c": "1034","n": "BARRA FERMENTO NATURAL 300 GR 20 UD"},
-  {"c": "1035","n": "BAGUETTE RUSTICA 280 GR 30 UD"},
-  {"c": "1036","n": "PAN PUEBLO 770 GR 8 UD"},
-  {"c": "1037","n": "HOGAZA CAMPESINA 770 GR 8 UD"},
-  {"c": "1038","n": "PANECILLO 6UD/20PACK 60 GR 120 UD"},
-  {"c": "1039","n": "CHAPATA MINI 5UD/14PACK 100 GR 70 UD"},
-  {"c": "1040","n": "BARRA ESPIGA CANDEAL 340 GR 20 UD"},
-  {"c": "1041","n": "PAN PICADO ANDALUZ 250 GR 20 UD"},
-  {"c": "1042","n": "PAN SEVILLANO 250 GR 20 UD"},
-  {"c": "1043","n": "PANECILLO CEBOLLA 70 GR 60 UD"},
-  {"c": "1044","n": "ROMBO MULTICEREAL 4UD/15 PACK 90 GR 60 UD"},
-  {"c": "1045","n": "BARRA MEDIA VIENA 140 GR 40 UD"},
-  {"c": "1047","n": "HOGAZA RUSTICA 390 GR 12 UD"},
-  {"c": "1049","n": "BARRA INTEGRAL 93,3% 300 GR 20 UD"},
-  {"c": "1050","n": "BARRITA CANDEAL 110 GR 60 UD"},
-  {"c": "1051","n": "BAGUETTE RUSTICA 280 GR 30 UD - ECI"},
-  {"c": "1052","n": "BARRA ESPIGA PLUS PURO TRIGO 400 GR 20 UD"},
-  {"c": "1053","n": "BARRA ESPIGA PLUS ACEITE OLIVA V.EXTRA 330 GR 20 UD"},
-  {"c": "1054","n": "BARRITA CASTILLA 100 GR 60 UD"},
-  {"c": "1056","n": "HOGAZA MAIZ Y PASAS 550 GR 12 UD"},
-  {"c": "1057","n": "LIBRETA CANDEAL 530 GR 14 UD"},
-  {"c": "1058","n": "HOGAZA PANACOL 500 GR 12 UD"},
-  {"c": "1059","n": "HOGAZA ESPELTA 550 GR 12 UD"},
-  {"c": "1060","n": "HOGAZA PASAS Y NUECES 550 GR 12 UD"},
-  {"c": "1061","n": "HOGAZA CENTENO 550 GR 12 UD"},
-  {"c": "1062","n": "PAN CAMPEON DEL MUNDO 750 GR 10 UD"},
-  {"c": "1063","n": "HOGAZA CEREALES 550 GR 12 UD"},
-  {"c": "1064","n": "HOGAZA PAN ALEMAN 550 GR"},
-  {"c": "1065","n": "HOGAZA PURO TRIGO 550 GR 12 UD"},
-  {"c": "1066","n": "HOGAZA GOURMET SARRACENO Y ESPELTA 450 GR 14 UD"},
-  {"c": "1067","n": "CHAPATIN GOURMET PASAS Y NUECES 45 GR 120 UD"},
-  {"c": "1068","n": "CHAPATIN GOURMET OLIVAS 45 GR 120 UD"},
-  {"c": "1069","n": "BARRA ESPIGA PLUS 330 GR 20 UD - DISMYL"},
-  {"c": "1070","n": "BARRA ESPIGA PLUS PURO TRIGO 330 GR 20 UD - DISMYL"},
-  {"c": "1084","n": "BARRA CAMPERA 330 GR 15 UD - ALCAMPO"},
-  {"c": "1100","n": "BARRA INTEGRAL 93,3% 300 GR 20 UD - ALCAMPO"},
-  {"c": "1102","n": "BARRA VIENA ESPIGA 270 GR 20 UD - ECOMORA"},
-  {"c": "1104","n": "BARRA PICOS CANDEAL ESPECIAL 270 GR 20 UD - ECI"},
-  {"c": "1107","n": "CHAPATIN GOURMENT 11 UD (COCIDO)"},
-  {"c": "1109","n": "CHAPATIN INTEGRAL 6 UD (COCIDO)"},
-  {"c": "1111","n": "BARRA RUSTICA MAIZ Y SEMILLAS 320 GR 20 UD"},
-  {"c": "1112","n": "BARRA RUSTICA SARRACENO Y SEMILLAS 320 GR 20 UD"},
-  {"c": "1113","n": "BARRA PROVENZAL 450 GR 12 UD"},
-  {"c": "1114","n": "HOGAZA DE SARRACENO Y SEMILLAS 450 GR 12 UD"},
-  {"c": "1115","n": "HOGAZA DE MAIZ Y SEMILLAS 450 GR 12 UD"},
-  {"c": "1116","n": "1/2 BAGUETTE SUPREME 125 GR 40 UD"},
-  {"c": "1118","n": "HOGAZA ESPELTA MEDIANA 450 G 12 UD"},
-  {"c": "1122","n": "HOGAZA PAN PROTEICO 400 GR 12 UD"},
-  {"c": "1123","n": "PROTEICO GOURMET 110 GR 50 UNDS"},
-  {"c": "1124","n": "HOGAZA CALABAZA CON PIPAS DE CALABAZA 450 GR 12 UD"},
-  {"c": "1125","n": "BARRA SARRACENO"},
-  {"c": "1126","n": "HOGAZA TRIGO ACEROLA"},
-  {"c": "1127","n": "HOGAZA CLASICA SEMOLA"},
-  {"c": "2000","n": "1/2 BAGUETTE SUPREM 125 GR 40 UD"},
-  {"c": "2001","n": "CARACOLAS CON PASAS 34 UD 115 GR"},
-  {"c": "2002","n": "PLANCHA DE HOJALDRE 30X40 24 UD"},
-  {"c": "2003","n": "CROISSANT CURVO MANTEQUILLA 100 GR 46 UD"},
-  {"c": "2004","n": "CROISSANT ARTESANO 100G 42UD 4,2KG"},
-  {"c": "2005","n": "NAPOLITANA CREMA 115GR 56UD 6,44KG"},
-  {"c": "2006","n": "NAPOLITANA CHOCOLATE 115GR 56UD 6,44 KG"},
-  {"c": "2007","n": "MOLLETE DE 95GR 60 UD"},
-  {"c": "2008","n": "PREPARADO PARA MIGAS 500GR 10 BOLSAS"},
-  {"c": "2009","n": "HERRADURA CREMA 35UD 180G 6,3KG"},
-  {"c": "2010","n": "HERRADURA CHOCOLATE 35UD 170G 5,95KG"},
-  {"c": "2011","n": "NAPOLITANA JAMON QUESO 56UD 110G 6,16KG"},
-  {"c": "2012","n": "BIZCOCHO DESAYUNO ZANAHORIA 2 KG"},
-  {"c": "2013","n": "BIZCOCHO DESAYUNO MARMOL 2KG"},
-  {"c": "2014","n": "BIZCOCHO DESAYUNO GRIEGO 2KG"},
-  {"c": "2016","n": "PANECILLO SIN GLUTEN 45G 45UD"},
-  {"c": "2017","n": "ROSCON PEQUEÑO SIN RELLENO 250 GR"},
-  {"c": "2018","n": "ROSCON PEQUEÑO CON RELLENO 250 GR"},
-  {"c": "2019","n": "ROSCON MEDIANO SIN RELLENO 500 GR"},
-  {"c": "2020","n": "ROSCON MEDIANO CON RELLENO 500 GR"},
-  {"c": "2027","n": "PASTAS DE TE MANTEQUILLA 2KG 2UD"}];
+const ENC = {salt:"ITzkJgzIuZVuSjDTP8GrjQ==", iv:"F0HaU5PAaUwtRwV9", ct:"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", it:250000};
+let PRODUCTOS = [];
 
 const LS_KEY = 'stockCamara_v1';
 let state = {};          // codigo -> cantidad (día actual)
 let hist = {};           // 'YYYY-MM-DD' -> {cod:cant}
+let histTs = {};         // 'YYYY-MM-DD' -> timestamp última modificación
+let PW = null;           // contraseña de la sesión (para cifrar/descifrar stock.json)
+let publicadoEl = null;  // fecha/hora del stock.json publicado
 let sortK = 'c', sortDir = 1;
-const nombrePorCod = Object.fromEntries(PRODUCTOS.map(p => [p.c, p.n]));
+let nombrePorCod = {};
 const norm = s => String(s ?? '').normalize('NFD').replace(/[̀-ͯ]/g,'').replace(/\s+/g,' ').trim().toUpperCase();
-const codPorNombre = Object.fromEntries(PRODUCTOS.map(p => [norm(p.n), p.c]));
+let codPorNombre = {};
 const $ = id => document.getElementById(id);
-const hoy = () => new Date().toISOString().slice(0,10);
+const hoy = () => { const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); };
 const fmt = n => (Math.round(n*100)/100).toLocaleString('es-ES');
 
 function vacio(){ return Object.fromEntries(PRODUCTOS.map(p => [p.c, 0])); }
 
 function cargarLS(){
   try { hist = JSON.parse(localStorage.getItem(LS_KEY) || '{}') || {}; } catch(e){ hist = {}; }
+  try { histTs = JSON.parse(localStorage.getItem(LS_KEY + '_ts') || '{}') || {}; } catch(e){ histTs = {}; }
 }
 function guardarLS(){
-  try { localStorage.setItem(LS_KEY, JSON.stringify(hist)); return true; }
+  try { localStorage.setItem(LS_KEY, JSON.stringify(hist)); localStorage.setItem(LS_KEY + '_ts', JSON.stringify(histTs)); return true; }
   catch(e){ aviso('No se pudo guardar en el navegador.', 'warn'); return false; }
 }
 
@@ -229,6 +147,7 @@ function abrirFecha(f){
 function guardar(silencioso){
   const f = $('fecha').value || hoy();
   hist[f] = {...state};
+  histTs[f] = Date.now();
   if (guardarLS() && !silencioso) aviso('Stock del ' + fDate(f) + ' guardado.', 'ok');
   rellenarComp(); render();
 }
@@ -344,7 +263,9 @@ function render(){
   $('kSin').textContent = vals.filter(v => v <= 0).length;
   $('kTot').textContent = fmt(vals.reduce((a,b) => a + b, 0));
   const f = $('fecha').value;
-  $('meta').textContent = hist[f] ? 'Stock del ' + fDate(f) : 'Stock del ' + fDate(f) + ' · sin guardar';
+  let m = hist[f] ? 'Stock del ' + fDate(f) : 'Stock del ' + fDate(f) + ' · sin datos';
+  if (publicadoEl) { const d = new Date(publicadoEl); m += ' · Publicado ' + d.toLocaleDateString('es-ES') + ' ' + d.toLocaleTimeString('es-ES', {hour:'2-digit', minute:'2-digit'}); }
+  $('meta').textContent = m;
 }
 
 $('tb').addEventListener('change', e => {
@@ -381,12 +302,101 @@ function exportar(){
   XLSX.writeFile(wb, `Stock_Camara_${f}.xlsx`);
 }
 
+// ===== ACCESO CON CONTRASEÑA =====
+const b64 = x => Uint8Array.from(atob(x), c => c.charCodeAt(0));
+async function clave(pw, salt, it, uso){
+  const base = await crypto.subtle.importKey('raw', new TextEncoder().encode(pw), 'PBKDF2', false, ['deriveKey']);
+  return crypto.subtle.deriveKey({name:'PBKDF2', salt, iterations:it, hash:'SHA-256'}, base, {name:'AES-GCM', length:256}, false, [uso]);
+}
+async function descifrarObj(pw, enc){
+  const key = await clave(pw, b64(enc.salt), enc.it, 'decrypt');
+  const pt = await crypto.subtle.decrypt({name:'AES-GCM', iv:b64(enc.iv)}, key, b64(enc.ct));
+  return JSON.parse(new TextDecoder().decode(pt));
+}
+async function cifrarObj(pw, obj){
+  const salt = crypto.getRandomValues(new Uint8Array(16)), iv = crypto.getRandomValues(new Uint8Array(12)), it = 250000;
+  const key = await clave(pw, salt, it, 'encrypt');
+  const ct = await crypto.subtle.encrypt({name:'AES-GCM', iv}, key, new TextEncoder().encode(JSON.stringify(obj)));
+  const t64 = u => btoa(String.fromCharCode(...new Uint8Array(u)));
+  let ctB = ''; const u8 = new Uint8Array(ct);
+  for (let i = 0; i < u8.length; i += 8192) ctB += String.fromCharCode(...u8.subarray(i, i + 8192));
+  return {salt:t64(salt), iv:t64(iv), ct:btoa(ctB), it};
+}
+async function descifrar(pw){ return descifrarObj(pw, ENC); }
+async function entrar(pw, recordar){
+  try {
+    PRODUCTOS = await descifrar(pw);
+  } catch(e) { return false; }
+  PW = pw;
+  nombrePorCod = Object.fromEntries(PRODUCTOS.map(p => [p.c, p.n]));
+  codPorNombre = Object.fromEntries(PRODUCTOS.map(p => [norm(p.n), p.c]));
+  if (recordar) try { sessionStorage.setItem('stockCamara_pw', pw); } catch(e){}
+  $('login').style.display = 'none';
+  $('app').style.display = '';
+  await iniciar();
+  return true;
+}
+function salir(){
+  try { sessionStorage.removeItem('stockCamara_pw'); } catch(e){}
+  location.reload();
+}
+$('loginForm').addEventListener('submit', async e => {
+  e.preventDefault();
+  $('loginErr').textContent = '';
+  $('loginBtn').disabled = true;
+  const ok = await entrar($('pw').value, true);
+  $('loginBtn').disabled = false;
+  if (!ok) { $('loginErr').textContent = 'Contraseña incorrecta'; $('pw').select(); }
+});
+(async () => {
+  let guardada = null;
+  try { guardada = sessionStorage.getItem('stockCamara_pw'); } catch(e){}
+  if (!(guardada && await entrar(guardada, false))) $('pw').focus();
+})();
+
+// ===== STOCK PUBLICADO (stock.json en GitHub) =====
+async function cargarPublicado(){
+  let enc;
+  try {
+    const r = await fetch('stock.json?t=' + Date.now(), {cache:'no-store'});
+    if (!r.ok) return 'none';
+    enc = await r.json();
+  } catch(e) { return 'none'; }
+  try {
+    const d = await descifrarObj(PW, enc);
+    let nuevos = 0;
+    for (const [f, datos] of Object.entries(d.hist || {})) {
+      const tsPub = (d.ts || {})[f] || 0;
+      if (!hist[f] || !histTs[f] || tsPub > histTs[f]) { hist[f] = datos; histTs[f] = tsPub; nuevos++; }
+    }
+    publicadoEl = d.publicado || null;
+    guardarLS();
+    return 'ok';
+  } catch(e) { return 'error'; }
+}
+
+async function publicar(){
+  guardar(true);
+  const obj = {publicado: Date.now(), hist, ts: histTs};
+  const enc = await cifrarObj(PW, obj);
+  const blob = new Blob([JSON.stringify(enc)], {type:'application/json'});
+  const a = document.createElement('a');
+  a.href = URL.createObjectURL(blob); a.download = 'stock.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(a.href), 2000);
+  aviso('Se ha descargado <b>stock.json</b>. Súbelo a GitHub (Add file → Upload files → Commit changes) sustituyendo al anterior. En 1–2 minutos todos verán el stock actualizado.', 'ok');
+}
+
 // ===== INICIO =====
+async function iniciar(){
 cargarLS();
+const pub = await cargarPublicado();
 const ultimas = Object.keys(hist).sort();
 $('fecha').value = hoy();
 abrirFecha(hoy());
-if (!hist[hoy()] && ultimas.length) aviso('Hoy aún no hay stock cargado. Último guardado: ' + fDate(ultimas[ultimas.length-1]) + '.', 'warn');
+if (pub === 'error') aviso('El stock publicado no se ha podido leer (¿se cifró con otra contraseña?).', 'warn');
+else if (!hist[hoy()] && ultimas.length) aviso('Hoy aún no hay stock cargado. Último guardado: ' + fDate(ultimas[ultimas.length-1]) + '.', 'warn');
+}
 </script>
 </body>
 </html>
