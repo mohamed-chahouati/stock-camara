@@ -363,7 +363,7 @@ async function cargarPublicado(){
     enc = await r.json();
   } catch(e) { return 'none'; }
   try {
-    const d = await descifrarObj(PW, enc);
+    const d = enc.ct ? await descifrarObj(PW, enc) : enc;   // admite stock.json cifrado o sin cifrar
     let nuevos = 0;
     for (const [f, datos] of Object.entries(d.hist || {})) {
       const tsPub = (d.ts || {})[f] || 0;
@@ -378,8 +378,7 @@ async function cargarPublicado(){
 async function publicar(){
   guardar(true);
   const obj = {publicado: Date.now(), hist, ts: histTs};
-  const enc = await cifrarObj(PW, obj);
-  const blob = new Blob([JSON.stringify(enc)], {type:'application/json'});
+  const blob = new Blob([JSON.stringify(obj)], {type:'application/json'});
   const a = document.createElement('a');
   a.href = URL.createObjectURL(blob); a.download = 'stock.json';
   document.body.appendChild(a); a.click(); a.remove();
@@ -394,7 +393,7 @@ const pub = await cargarPublicado();
 const ultimas = Object.keys(hist).sort();
 $('fecha').value = hoy();
 abrirFecha(hoy());
-if (pub === 'error') aviso('El stock publicado no se ha podido leer (¿se cifró con otra contraseña?).', 'warn');
+if (pub === 'error') aviso('El stock publicado no se ha podido leer (revisa el archivo stock.json).', 'warn');
 else if (!hist[hoy()] && ultimas.length) aviso('Hoy aún no hay stock cargado. Último guardado: ' + fDate(ultimas[ultimas.length-1]) + '.', 'warn');
 }
 </script>
